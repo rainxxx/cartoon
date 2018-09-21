@@ -11,7 +11,7 @@
 				<div class="cartoon">
 					<ul>
 						<li v-for="cartoon in cartoonList">
-							<div class="item clearfix">
+							<div class="item clearfix" :class="{active: cartoon.id==cartoonActive}" @click="hadnleCartoonListClick(cartoon.id,$event)">
 								<img :src="cartoon.img" />
 								<div class="info">
 									<h1>{{cartoon.name}}</h1>
@@ -32,7 +32,7 @@
 				<div class="chapter">
 					<el-row>
 						<p class="kindLabel">降灵记</p>
-						<el-button type="primary" @click="dialogVisible = true" plain>添加章节</el-button>
+						<el-button type="primary" @click="openChapterDialog" plain>添加章节</el-button>
 					</el-row>
 
 					<div class="chapter-list">
@@ -43,20 +43,15 @@
 							</div>
 							<div>
 								<label>排序：</label>
-								<el-button type="" @click="dialogVisible = true" size="mini" plain>正序</el-button>
-								<el-button type="" @click="dialogVisible = true" size="mini" plain>倒序</el-button>
+								<el-button type="" @click="" size="mini" plain>正序</el-button>
+								<el-button type="" @click="" size="mini" plain>倒序</el-button>
 							</div>
 						</div>
 						<div class="list" style="font-size: 14px;">
 							<ul>
-								<li>
+								<li v-for="(chapter,index) in chapterList" @click="handleChapterClick(chapter.id)" :class="{active: chapter.id==chapterActive}"  >
 									<div>
-										<p>第1话</p>
-									</div>
-								</li>
-								<li>
-									<div>
-										<p>第2话</p>
+										<p>第{{index+1}}话</p>
 									</div>
 								</li>
 							</ul>
@@ -68,55 +63,151 @@
 				<div class="content">
 					<el-row>
 						<p class="kindLabel">第一话</p>
-						<el-button type="primary" @click="dialogVisible = true" plain>添加图片</el-button>
+						<el-button type="primary" @click="handleImgSave" plain>保存更改</el-button>
+						<el-button type="primary" @click="previewVisible=!previewVisible" plain>预览图片</el-button>
+						
+						<div class="imgs" style="margin: 10px 0px;">
+							<el-input type="textarea" placeholder="注：多个图片使用,号隔开" :autosize="{ minRows: 20}" v-model="chapterImgs"></el-input>
+						</div>
+						
+						<div class="preview-img" v-if="previewVisible">
+							<div v-for="img in imgList">
+								<img :src="img" />
+							</div>
+						</div>
 					</el-row>
 				</div>
-				<cartoon-form-dialog ref="cartoonForma" v-model="dialogVisible" @saveCallback="loadCartoonList()"></cartoon-form-dialog>
+
 			</el-col>
 		</el-row>
 
+		<!-- 动漫表单模态框 -->
+		<cartoon-form-dialog ref="cartoonForm" v-model="dialogVisible" @saveCallback="loadCartoonList"></cartoon-form-dialog>
+		<!-- 章节表单模态框 @saveCallback="loadChapterList(id)" -->
+		<chapter-form-dialog ref="chapterForm" v-model="chapterVisible" @save-callback="loadChapterList" :cartoonId="cartoonActive"></chapter-form-dialog>
 	</div>
 </template>
 
 <script>
 	import CartoonFormDialog from './CartoonFormDialog'
+	import ChapterFormDialog from './ChapterFormDialog'
 	export default {
 		name: 'CartoonEdit',
 		data() {
 			return {
 				dialogVisible: false,
-				cartoonList: []
+				chapterVisible: false,
+				cartoonList: [],
+				cartoonActive: '',
+				chapterList: [],
+				chapterActive: '',
+				chapterImgs: '',
+				previewVisible: false
 			}
 		},
 		methods: {
 			// 加载动漫数据
-			loadCartoonList(){
+			loadCartoonList() {
 				var _this = this;
 				this.$http.get('/cartoon/list').then(
 					function(response) {
-						var list =  response.data;
-						_this.cartoonList = list;		
+						var list = response.data;
+						_this.cartoonList = list;
 					}
 				)
 			},
 			// 删除动漫
 			handleCartoonDelete(id) {
 				var _this = this;
-				this.$http.post('/cartoon/delete', {id}).then(function(response) {
+				this.$http.post('/cartoon/delete', {
+					id
+				}).then(function(response) {
 					_this.loadCartoonList();
 				})
 			},
 			// 编辑动漫
-			handleCartoonEdit(id){
+			handleCartoonEdit(id) {
 				// 编辑操作由子组件完成
-				this.$refs.cartoonForma.handleCartoonEdit(id);
+				this.$refs.cartoonForm.handleCartoonEdit(id);
+			},
+			// 加载列表数据
+			loadChapterList(cartoonId) {
+				var _this = this;
+				this.$http.get('/cartoon/chapter/list?cartoonId=' + cartoonId).then(
+					function(response) {
+						var list = response.data;
+						_this.chapterList = list;
+					}
+				)
+			},
+			// 点击列表页
+			hadnleCartoonListClick(id) {
+				this.cartoonActive = id;
+				this.loadChapterList(id);
+			},
+			// 打开修改章节弹出框
+			openChapterDialog() {
+				if(this.cartoonActive) {
+					this.chapterVisible = true
+				} else {
+					this.$message.error('请先选择一部漫画，在点击添加章节');
+				}
+			},
+			// 保存图片更改
+			handleImgSave(){
+				if(this.chapterActive) {
+					var chapterId = this.chapterActive;
+					var _this = this;
+					this.$http.post('/cartoon/chapter/img/insert',{
+						chapterId,
+						imgs: _this.chapterImgs
+					}).then(
+						function(response) {
+							_this.$message({ message: '保存成功',type: 'success'});							
+						}
+					)
+				} else {
+					this.$message.error('请先选择一部漫画，在选择一个章节,在进行操作');
+				}
+			},
+			handleChapterClick(chapterId){
+				this.chapterActive = chapterId;
+				this.loadImgs(chapterId);
+			},
+			loadImgs(chapterId){
+				var _this = this;
+				var chapterId = this.chapterActive;
+				this.$http.get('/cartoon/chapter/img/list?chapterId=' + chapterId).then(
+					function(response) {
+						var list = response.data;
+						var imgs = list.reduce(function(total, currentValue, currentIndex, arr){
+							var str = total + currentValue.imgUrl;
+							if(currentIndex+1 < arr.length){
+								str += ",\n";
+							}
+							return str;
+						},'')
+						
+						_this.chapterImgs= imgs;
+					}
+				)
 			}
 		},
 		mounted() {
 			this.loadCartoonList();
 		},
 		components: {
-			CartoonFormDialog
+			CartoonFormDialog,
+			ChapterFormDialog
+		},
+		computed: {
+			imgList(){
+				var list = this.chapterImgs.split(',').filter(function(currentValue){
+					return currentValue.trim() != '';
+				})
+				alert(list);
+				return list;				
+			}
 		}
 	}
 </script>
@@ -156,15 +247,15 @@
 	}
 	
 	.item:active {
-		border: solid 2px red;
+		/*border: solid 2px red;*/
 	}
 	
 	.item .active {
-		border: solid 2px red;
+		border: solid 1px red;
 	}
 	
 	.active {
-		border: solid 2px red;
+		border: solid 1px red;
 	}
 	
 	.item>img {
@@ -196,12 +287,6 @@
 	.chapter {
 		/*border: solid 1px lightgray;*/
 	}
-	
-	
-	
-	
-	
-	
 	
 	.chapter {
 		padding: 8px;
@@ -256,4 +341,19 @@
 	.chapter-list .list ul li:active {
 		border: solid 1px red;
 	}
+	
+	.chapter-list .list ul li.active {
+		color: red;
+	}
+	
+	.preview-img{
+		width: 400px;
+		padding: 5px;
+	}
+	
+	.preview-img img{
+		display: block;
+		width: 100%;
+	}
+	
 </style>
